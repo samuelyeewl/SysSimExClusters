@@ -32,7 +32,7 @@ function generate_stable_cluster(star::StarT, sim_param::SimParam, incl_sys::Flo
         eccentricity::Float64, omega_e::Float64 = generate_e_omega(sigma_ecc)::Tuple{Float64,Float64}
         ecc, omega = [eccentricity], [omega_e]
         asc_node, mean_anom, incl = [2pi*rand()], [2pi*rand()], [incl_sys]
-        return (P, R, mass, ecc, omega, asc_node, mean_anom, incl)
+        return (P, R, mass, ecc, omega, asc_node, mean_anom, incl, [0.0])
     end
 
     # If reach here, then at least 2 planets in cluster
@@ -72,7 +72,7 @@ function generate_stable_cluster(star::StarT, sim_param::SimParam, incl_sys::Flo
                 println("Cannot fit any more planets in cluster.")
                 break
             end
-            P[i] = draw_period_lognormal_allowed_regions(P[1:i-1], mass[1:i-1], star.mass, sim_param; μ=log_mean_P, σ=n*sigma_logperiod_per_pl_in_cluster, x_min=1/sqrt(max_period_ratio), x_max=sqrt(max_period_ratio))
+            P[i] = draw_period_lognormal_allowed_regions(P[1:i-1], mass[1:i-1], mass[i], star.mass, sim_param; μ=log_mean_P, σ=n*sigma_logperiod_per_pl_in_cluster, x_min=1/sqrt(max_period_ratio), x_max=sqrt(max_period_ratio))
         end
         found_good_periods = any(isnan.(P)) ? false : true
         #=
@@ -121,9 +121,9 @@ function generate_stable_cluster(star::StarT, sim_param::SimParam, incl_sys::Flo
 
     if !found_stable_cluster
         #println("# Warning: Did not find a good set of sizes, masses, periods, eccentricities, and mutual inclinations for one cluster.")
-        return (fill(NaN,n), R, mass, ecc, omega, asc_nodes, mean_anoms, incls)  # Return NaNs for periods to indicate failed
+        return (fill(NaN,n), R, mass, ecc, omega, asc_nodes, mean_anoms, incls, incls_mut)  # Return NaNs for periods to indicate failed
     end
-    return (P, R, mass, ecc, omega, asc_nodes, mean_anoms, incls) # NOTE: can also return earlier if only one planet in cluster or if fail to generate a good set of values; also, the planets are NOT sorted at this point
+    return (P, R, mass, ecc, omega, asc_nodes, mean_anoms, incls, incls_mut) # NOTE: can also return earlier if only one planet in cluster or if fail to generate a good set of values; also, the planets are NOT sorted at this point
 end
 
 function generate_num_clusters_poisson(s::Star, sim_param::SimParam)
@@ -170,7 +170,8 @@ function generate_planetary_system_clustered(star::StarAbstract, sim_param::SimP
     sigma_incl_near_mmr = deg2rad(get_real(sim_param, "sigma_incl_near_mmr"))
     max_incl_sys = get_real(sim_param, "max_incl_sys")
     f_high_incl = get_real(sim_param, "f_high_incl")
-    sigma_incl_use = rand() < f_high_incl ? max(sigma_incl, sigma_incl_near_mmr) : min(sigma_incl, sigma_incl_near_mmr)
+    is_high_incl = rand() < f_high_incl
+    sigma_incl_use = is_high_incl ? max(sigma_incl, sigma_incl_near_mmr) : min(sigma_incl, sigma_incl_near_mmr)
 
     # Decide whether to assign a planetary system to the star at all:
     if rand() > f_stars_with_planets_attempted
@@ -184,7 +185,7 @@ function generate_planetary_system_clustered(star::StarAbstract, sim_param::SimP
     # Generate a set of periods, planet radii, and planet masses:
     attempts_system = 0
     max_attempts_system = 1 # NOTE: currently this should not matter; each system is always attempted just once
-    local num_pl, clusteridlist, Plist, Rlist, masslist, ecclist, omegalist, ascnodelist, meananomlist, incllist
+    local num_pl, clusteridlist, Plist, Rlist, masslist, ecclist, omegalist, ascnodelist, meananomlist, incllist, inclmutlist
     valid_system = false
     while !valid_system && attempts_system < max_attempts_system
 
@@ -207,6 +208,7 @@ function generate_planetary_system_clustered(star::StarAbstract, sim_param::SimP
         ascnodelist::Array{Float64,1} = Array{Float64}(undef, num_pl)
         meananomlist::Array{Float64,1} = Array{Float64}(undef, num_pl)
         incllist::Array{Float64,1} = Array{Float64}(undef, num_pl)
+        inclmutlist::Array{Float64,1} = Array{Float64}(undef, num_pl)
 
         @assert num_pl_in_cluster[1] >= 1
         pl_start = 1
@@ -215,12 +217,12 @@ function generate_planetary_system_clustered(star::StarAbstract, sim_param::SimP
             pl_stop += num_pl_in_cluster[c]
 
             # Draw a stable cluster (with unscaled periods):
-            Plist_tmp::Array{Float64,1}, Rlist_tmp::Array{Float64,1}, masslist_tmp::Array{Float64,1}, ecclist_tmp::Array{Float64,1}, omegalist_tmp::Array{Float64,1}, ascnodelist_tmp::Array{Float64,1}, meananomlist_tmp::Array{Float64,1}, incllist_tmp::Array{Float64,1} = generate_stable_cluster(star, sim_param, incl_sys, sigma_incl_use, n=num_pl_in_cluster[c])
+            Plist_tmp::Array{Float64,1}, Rlist_tmp::Array{Float64,1}, masslist_tmp::Array{Float64,1}, ecclist_tmp::Array{Float64,1}, omegalist_tmp::Array{Float64,1}, ascnodelist_tmp::Array{Float64,1}, meananomlist_tmp::Array{Float64,1}, incllist_tmp::Array{Float64,1}, inclmutlist_tmp::Array{Float64,1} = generate_stable_cluster(star, sim_param, incl_sys, sigma_incl_use, n=num_pl_in_cluster[c])
 
             clusteridlist[pl_start:pl_stop] = ones(Int64, num_pl_in_cluster[c])*c
             Rlist[pl_start:pl_stop], masslist[pl_start:pl_stop] = Rlist_tmp, masslist_tmp
             ecclist[pl_start:pl_stop], omegalist[pl_start:pl_stop] = ecclist_tmp, omegalist_tmp
-            ascnodelist[pl_start:pl_stop], meananomlist[pl_start:pl_stop], incllist[pl_start:pl_stop] = ascnodelist_tmp, meananomlist_tmp, incllist_tmp
+            ascnodelist[pl_start:pl_stop], meananomlist[pl_start:pl_stop], incllist[pl_start:pl_stop], inclmutlist[pl_start:pl_stop] = ascnodelist_tmp, meananomlist_tmp, incllist_tmp, inclmutlist_tmp
 
             valid_cluster = !any(isnan.(Plist_tmp)) # if the cluster has any nans, the whole cluster is discarded
             valid_period_scale = false
@@ -264,6 +266,7 @@ function generate_planetary_system_clustered(star::StarAbstract, sim_param::SimP
             ascnodelist = ascnodelist[keep]
             meananomlist = meananomlist[keep]
             incllist = incllist[keep]
+            inclmutlist = inclmutlist[keep]
         end
 
         valid_system = false
@@ -313,9 +316,9 @@ function generate_planetary_system_clustered(star::StarAbstract, sim_param::SimP
     orbit = Array{Orbit}(undef, num_pl)
     idx = sortperm(Plist) # TODO OPT: Check to see if sorting is significant time sink. If so, could reduce redundant sortperm
     for i in 1:num_pl
-        orbit[i] = Orbit(Plist[idx[i]], ecclist[idx[i]], incllist[idx[i]], omegalist[idx[i]], ascnodelist[idx[i]], meananomlist[idx[i]])
+        orbit[i] = Orbit(Plist[idx[i]], ecclist[idx[i]], incllist[idx[i]], omegalist[idx[i]], ascnodelist[idx[i]], meananomlist[idx[i]], inclmutlist[idx[i]])
         pl[i] = Planet(Rlist[idx[i]], masslist[idx[i]], clusteridlist[idx[i]])
     end
 
-    return PlanetarySystem(star, pl, orbit)
+    return PlanetarySystem(star, pl, orbit, incl_sys, is_high_incl)
 end

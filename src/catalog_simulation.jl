@@ -4,14 +4,14 @@ function save_physical_catalog(cat_phys::KeplerPhysicalCatalog, sim_param::SimPa
 
     f = open(joinpath(save_path, "physical_catalog$run_number.csv"), "w")
     write_model_params(f, sim_param)
-    println(f, "target_id,star_id,planet_mass,planet_radius,clusterid,period,ecc,star_mass,star_radius")
+    println(f, "target_id,star_id,planet_mass,planet_radius,clusterid,period,ecc,incl,incl_mut,asc_node,arg_peri,star_mass,star_radius,incl_sys,is_high_incl")
     for (i,targ) in enumerate(cat_phys.target)
         if length(targ.sys) > 1 #this should never happen
             println("There is more than one system for a given target? Check index: ", i)
         end
         if length(targ.sys[1].planet) > 0
             for (j,planet) in enumerate(targ.sys[1].planet)
-                println(f, join([i, targ.sys[1].star.id, planet.mass, planet.radius, planet.id, targ.sys[1].orbit[j].P, targ.sys[1].orbit[j].ecc, targ.sys[1].star.mass, targ.sys[1].star.radius], ","))
+                println(f, join([i, targ.sys[1].star.id, planet.mass, planet.radius, planet.id, targ.sys[1].orbit[j].P, targ.sys[1].orbit[j].ecc, targ.sys[1].orbit[j].incl, targ.sys[1].orbit[j].incl_mut, targ.sys[1].orbit[j].asc_node, targ.sys[1].orbit[j].omega, targ.sys[1].star.mass, targ.sys[1].star.radius, targ.sys[1].sys_incl, targ.sys[1].high_incl], ","))
             end
         end
     end
@@ -22,12 +22,12 @@ function save_physical_catalog_stars_only(cat_phys::KeplerPhysicalCatalog, sim_p
 
     f = open(joinpath(save_path, "physical_catalog_stars$run_number.csv"), "w")
     write_model_params(f, sim_param)
-    println(f, "target_id,star_id,star_mass,star_radius,num_planets")
+    println(f, "target_id,star_id,star_mass,star_radius,num_planets,incl_sys,is_high_incl")
     for (i,targ) in enumerate(cat_phys.target)
         if length(targ.sys) > 1 #this should never happen
             println("There is more than one system for a given target? Check index: ", i)
         end
-        println(f, join([i, targ.sys[1].star.id, targ.sys[1].star.mass, targ.sys[1].star.radius, length(targ.sys[1].planet)], ","))
+        println(f, join([i, targ.sys[1].star.id, targ.sys[1].star.mass, targ.sys[1].star.radius, length(targ.sys[1].planet), targ.sys[1].sys_incl, targ.sys[1].high_incl], ","))
     end
     close(f)
 end
